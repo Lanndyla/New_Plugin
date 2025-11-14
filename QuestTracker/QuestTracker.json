@@ -1,0 +1,14 @@
+{
+  "Author": "Lanndyla",
+  "Name": "Quest Tracker",
+  "Punchline": "View all FFXIV quests organized by expansion with visual quest chains",
+  "Description": "A comprehensive quest tracker that displays all quests in the game sorted by expansion. Shows quest chains with visual connections between related quests.",
+  "InternalName": "QuestTracker",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "quest",
+    "tracker",
+    "ui",
+    "utility"
+  ]
+}
