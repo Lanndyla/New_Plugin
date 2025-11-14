@@ -14,14 +14,16 @@ public class QuestDataService : IDisposable
     private readonly HttpClient httpClient;
     private readonly IPluginLog log;
     private readonly Dictionary<int, QuestData> questCache = new();
-    private readonly Dictionary<int, List<QuestData>> questsByExpansion = new();
+    private readonly Dictionary<int, Dictionary<QuestCategory, List<QuestData>>> questsByExpansionAndCategory = new();
     private bool isLoading = false;
     private bool isLoaded = false;
+    private int totalQuestsLoaded = 0;
     
     private const string XIVAPI_BASE = "https://xivapi.com";
     
     public bool IsLoading => isLoading;
     public bool IsLoaded => isLoaded;
+    public int TotalQuestsLoaded => totalQuestsLoaded;
     
     public QuestDataService(IPluginLog pluginLog)
     {
@@ -55,7 +57,8 @@ public class QuestDataService : IDisposable
             // Fetch all pages
             var allQuests = new List<QuestSummary>(firstPage.Results);
             
-            for (int page = 2; page <= Math.Min(totalPages, 100); page++) // Limit to 100 pages for now
+            // Fetch all pages (not just 100)
+            for (int page = 2; page <= totalPages; page++)
             {
                 var pageData = await FetchQuestPageAsync(page);
                 if (pageData?.Results != null)
@@ -64,14 +67,19 @@ public class QuestDataService : IDisposable
                 }
                 
                 // Small delay to avoid rate limiting
-                await Task.Delay(100);
+                await Task.Delay(50);
+                
+                if (page % 10 == 0)
+                {
+                    log.Info($"Fetched {page}/{totalPages} pages...");
+                }
             }
             
-            log.Info($"Fetched {allQuests.Count} quest summaries");
+            log.Info($"Fetched {allQuests.Count} quest summaries, now loading details...");
             
             // Now fetch detailed data for each quest (in batches)
             var batchSize = 50;
-            for (int i = 0; i < Math.Min(allQuests.Count, 500); i += batchSize) // Limit to 500 quests for testing
+            for (int i = 0; i < allQuests.Count; i += batchSize)
             {
                 var batch = allQuests.Skip(i).Take(batchSize);
                 var tasks = batch.Select(q => FetchQuestDetailAsync(q.Id));
@@ -84,23 +92,36 @@ public class QuestDataService : IDisposable
                         questCache[quest.Id] = quest;
                         
                         var expansionId = quest.Expansion?.Id ?? 0;
-                        if (!questsByExpansion.ContainsKey(expansionId))
+                        var category = quest.Category;
+                        
+                        if (!questsByExpansionAndCategory.ContainsKey(expansionId))
                         {
-                            questsByExpansion[expansionId] = new List<QuestData>();
+                            questsByExpansionAndCategory[expansionId] = new Dictionary<QuestCategory, List<QuestData>>();
                         }
-                        questsByExpansion[expansionId].Add(quest);
+                        
+                        if (!questsByExpansionAndCategory[expansionId].ContainsKey(category))
+                        {
+                            questsByExpansionAndCategory[expansionId][category] = new List<QuestData>();
+                        }
+                        
+                        questsByExpansionAndCategory[expansionId][category].Add(quest);
+                        totalQuestsLoaded++;
                     }
                 }
                 
-                log.Info($"Loaded {questCache.Count} quests so far...");
-                await Task.Delay(500); // Delay between batches
+                if ((i / batchSize) % 10 == 0)
+                {
+                    log.Info($"Loaded {totalQuestsLoaded} quests so far...");
+                }
+                
+                await Task.Delay(200); // Delay between batches
             }
             
             // Build quest relationships
             BuildQuestRelationships();
             
             isLoaded = true;
-            log.Info($"Finished loading {questCache.Count} quests");
+            log.Info($"Finished loading {totalQuestsLoaded} quests");
         }
         catch (Exception ex)
         {
@@ -131,7 +152,7 @@ public class QuestDataService : IDisposable
     {
         try
         {
-            var url = $"{XIVAPI_BASE}/Quest/{questId}";
+            var url = $"{XIVAPI_BASE}/Quest/{questId}?columns=ID,Name,Icon,Expansion.ID,Expansion.Name,PreviousQuest0,PreviousQuest1,PreviousQuest2,ClassJobLevel0,JournalGenre.ID,JournalGenre.Name,ClassJobCategory0.Name";
             var response = await httpClient.GetStringAsync(url);
             return JsonSerializer.Deserialize<QuestData>(response);
         }
@@ -165,18 +186,48 @@ public class QuestDataService : IDisposable
         }
     }
     
-    public List<QuestData> GetQuestsByExpansion(int expansionId)
+    public List<QuestData> GetQuestsByExpansionAndCategory(int expansionId, QuestCategory category)
     {
-        return questsByExpansion.TryGetValue(expansionId, out var quests) 
-            ? quests 
-            : new List<QuestData>();
+        if (questsByExpansionAndCategory.TryGetValue(expansionId, out var categories))
+        {
+            if (categories.TryGetValue(category, out var quests))
+            {
+                return quests;
+            }
+        }
+        return new List<QuestData>();
     }
     
-    public List<QuestData> GetRootQuests(int expansionId)
+    public List<QuestData> GetRootQuests(int expansionId, QuestCategory category)
     {
-        var quests = GetQuestsByExpansion(expansionId);
+        var quests = GetQuestsByExpansionAndCategory(expansionId, category);
         return quests.Where(q => q.PreviousQuests.Count == 0).ToList();
     }
+    
+    public Dictionary<QuestCategory, int> GetQuestCountsByCategory(int expansionId)
+    {
+        var counts = new Dictionary<QuestCategory, int>();
+        
+        if (questsByExpansionAndCategory.TryGetValue(expansionId, out var categories))
+        {
+            foreach (var kvp in categories)
+            {
+                counts[kvp.Key] = kvp.Value.Count;
+            }
+        }
+        return counts;
+    }
+        
+    public List<QuestData> GetRootQuestsSortedByLevel(int expansionId, QuestCategory category)
+    {
+        var quests = GetRootQuests(expansionId, category);
+        return quests.OrderBy(q => q.Level).ToList();
+    }
+    
+    public List<int> GetAllQuestIds()
+    {
+        return questCache.Keys.ToList();
+}
     
     public void Dispose()
     {

@@ -2,13 +2,16 @@
   "Author": "Lanndyla",
   "Name": "Quest Tracker",
   "Punchline": "View all FFXIV quests organized by expansion with visual quest chains",
-  "Description": "A comprehensive quest tracker that displays all quests in the game sorted by expansion. Shows quest chains with visual connections between related quests.",
+  "Description": "A comprehensive quest tracker that displays all quests in the game sorted by expansion. Shows quest chains with visual connections between related quests. Track your quest completion status and browse quests from early game to endgame.",
   "InternalName": "QuestTracker",
   "ApplicableVersion": "any",
+  "IconUrl": "https://raw.githubusercontent.com/Lanndyla/New_Plugin/main/QuestTracker/images/icon.png",
   "Tags": [
     "quest",
     "tracker",
     "ui",
-    "utility"
+    "utility",
+    "msq",
+    "sidequests"
   ]
 }

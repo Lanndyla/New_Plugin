@@ -8,7 +8,10 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- ECommons reference removed temporarily to allow building without full Dalamud environment -->
+  <!--
   <ItemGroup>
     <ProjectReference Include="..\ECommons\ECommons.csproj" />
   </ItemGroup>
+  -->
 </Project>
